@@ -725,13 +725,18 @@ namespace VSNDK.DebugEngine
             string address = frameInfo[1];
             m_functionName = frameInfo[2];
             m_documentName = frameInfo[3];
-            try
-            {
-                m_lineNum = Convert.ToUInt32(frameInfo[4]);
-            }
-            catch (Exception e)
-            {
+            if (frameInfo[4] == "")
                 m_lineNum = 0;
+            else
+            {
+                try
+                {
+                    m_lineNum = Convert.ToUInt32(frameInfo[4]);
+                }
+                catch (Exception e)
+                {
+                    m_lineNum = 0;
+                }
             }
 
             _locals = new ArrayList();

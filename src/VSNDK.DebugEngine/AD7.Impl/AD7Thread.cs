@@ -140,13 +140,18 @@ namespace VSNDK.DebugEngine
             else
                 _filename = fullname;
 
-            try
-            {
-                _line = Convert.ToUInt32(line);
-            }
-            catch
-            {
+            if (line == "")
                 _line = 0;
+            else
+            {
+                try
+                {
+                    _line = Convert.ToUInt32(line);
+                }
+                catch
+                {
+                    _line = 0;
+                }
             }
 
             _id = id;

@@ -40,7 +40,7 @@ show:->:#NOT CREATED!
 -data-evaluate-expression:->:??^done;{??=;#60\;;@@$EOL$;}{??^error;{??-data-evaluate-expression: Usage: -data-evaluate-expression expression;{#61\;Error in expression.;}{??A syntax error in expression, near `'.;{#61;A syntax error at the end of the expression.;}{??=;#61\;;@@$EOL$;};};};};
 ptype:->:??type = ;{@@\\n";}{# ;};
 whatis:->:??type = ;{@@\\n";}{# ;};
--exec-interrupt:->:??^done;{??signal-received;{??signal-meaning="Killed";{#47;}{#44\;;??addr=";@@";#\;;??func=";@@";0;??file=;{#\;;??";@@";#\;;??line=";@@";};};};};#\;;??thread-id=;{??";@@";};
+-exec-interrupt:->:??^done;{??signal-received;{??signal-meaning="Killed";{#47;}{#44\;;??addr=";@@";#\;;??func=";@@";0;??file=;{#\;;??";@@";#\;;??line=";@@";};};}{#44};};#\;;??thread-id=;{??";@@";};
 -target-detach:->:#NOT CREATED!
 -var-info-num-children:->:??numchild;{??";@@";}{#ERROR;};
 info:->:??Address;{??0x;?<? ;@@ ;}{??Line;{@@of;};};

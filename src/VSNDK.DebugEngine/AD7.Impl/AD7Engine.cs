@@ -148,8 +148,17 @@ namespace VSNDK.DebugEngine
         /// the Debug Engine, but the one related to conditional breakpoint can resume execution. If both events happens at the same 
         /// time, the Debug Engine could resume the execution instead of pausing it.
         /// </summary>
-        public ManualResetEvent m_running = new ManualResetEvent(true); 
+        public ManualResetEvent m_running = new ManualResetEvent(true);
 
+        /// <summary>
+        /// 
+        /// </summary>
+        public int interruptCounter = 0;
+
+        /// <summary>
+        /// 
+        /// </summary>
+        public bool receivedInterruptSignal = false;
 
         /// <summary>
         /// Used to avoid race condition when there are conditional breakpoints and a breakpoint is hit. This situation is similar to the above one.
@@ -321,29 +330,36 @@ namespace VSNDK.DebugEngine
         /// <returns> VSConstants.S_OK. </returns>
         int IDebugEngine2.CauseBreak()
         {
+            m_running.WaitOne();
+
+            if (m_state == DE_STATE.DESIGN_MODE || m_state == DE_STATE.BREAK_MODE)
+            {
+                interruptCounter += 1;
+            }
             // If not already broken, send the interrupt
-            if (m_state != DE_STATE.DESIGN_MODE && m_state != DE_STATE.BREAK_MODE && m_state != DE_STATE.STEP_MODE)
+            else if (m_state != DE_STATE.STEP_MODE)
             {
                 bool signalReceived;
-                bool hitBreakAll;
                 if (EventDispatcher.m_GDBRunMode == true)
                 {
                     HandleProcessExecution.m_mre.Reset();
-                    hitBreakAll = m_running.WaitOne();
+
+                    receivedInterruptSignal = false;
 
                     // Sends the GDB command that interrupts the background execution of the target.
                     // (http://sourceware.org/gdb/onlinedocs/gdb/GDB_002fMI-Program-Execution.html)
                     GDBParser.addGDBCommand(@"-exec-interrupt");
+//                    m_state = AD7Engine.DE_STATE.BREAK_MODE;
 
                     // Ensure the process is interrupted before returning                
-                    signalReceived = HandleProcessExecution.m_mre.WaitOne(1000);
-
-                    m_running.Set();
+                    signalReceived = HandleProcessExecution.m_mre.WaitOne(2000);
 
                     if (VSNDK.Package.ControlDebugEngine.isDebugEngineRunning)
                         HandleProcessExecution.m_mre.Reset();
                 }
             }
+
+            m_running.Set();
 
             return VSConstants.S_OK;
         }
@@ -670,6 +686,7 @@ namespace VSNDK.DebugEngine
         /// <returns> VSConstants.S_OK. </returns>
         int IDebugEngineLaunch2.TerminateProcess(IDebugProcess2 process)
         {
+            m_state = DE_STATE.DONE;
             CauseBreak();
             if (eDispatcher != null)
             {

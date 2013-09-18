@@ -38,7 +38,7 @@ namespace VSNDK.DebugEngine
         private IDebugBreakpointRequest2 m_pBPRequest;
         private BP_REQUEST_INFO m_bpRequestInfo; 
         private AD7Engine m_engine;
-        private BreakpointManager m_bpManager;
+//        private BreakpointManager m_bpManager;
 
         private List<AD7BoundBreakpoint> m_boundBreakpoints;
         public List<AD7BoundBreakpoint> boundBPs
@@ -59,7 +59,8 @@ namespace VSNDK.DebugEngine
         /// <param name="pBPRequest"> The breakpoint request used to create this pending breakpoint. </param>
         /// <param name="engine"> The AD7Engine object that represents the DE. </param>
         /// <param name="bpManager"> The breakpoint manager. </param>
-        public AD7PendingBreakpoint(IDebugBreakpointRequest2 pBPRequest, AD7Engine engine, BreakpointManager bpManager)
+        public AD7PendingBreakpoint(IDebugBreakpointRequest2 pBPRequest, AD7Engine engine)
+//        public AD7PendingBreakpoint(IDebugBreakpointRequest2 pBPRequest, AD7Engine engine, BreakpointManager bpManager)
         {
             m_pBPRequest = pBPRequest;
             BP_REQUEST_INFO[] requestInfo = new BP_REQUEST_INFO[1];
@@ -79,7 +80,7 @@ namespace VSNDK.DebugEngine
             }
 
             m_engine = engine;
-            m_bpManager = bpManager;
+//            m_bpManager = bpManager;
             m_boundBreakpoints = new System.Collections.Generic.List<AD7BoundBreakpoint>();
             
             m_enabled = true;

@@ -33,7 +33,7 @@ namespace VSNDK.DebugEngine
         /// <summary>
         /// List of pending breakpoints.
         /// </summary>
-        private List<AD7PendingBreakpoint> m_pendingBreakpoints;
+        public List<AD7PendingBreakpoint> m_pendingBreakpoints;
 
         /// <summary>
         /// List of active breakpoints.
@@ -60,7 +60,8 @@ namespace VSNDK.DebugEngine
         /// <param name="ppPendingBP"> Returns an IDebugPendingBreakpoint2 object that represents the pending breakpoint. </param>
         public void CreatePendingBreakpoint(IDebugBreakpointRequest2 pBPRequest, out IDebugPendingBreakpoint2 ppPendingBP)
         {
-            AD7PendingBreakpoint pendingBreakpoint = new AD7PendingBreakpoint(pBPRequest, m_engine, this);
+            AD7PendingBreakpoint pendingBreakpoint = new AD7PendingBreakpoint(pBPRequest, m_engine);
+//            AD7PendingBreakpoint pendingBreakpoint = new AD7PendingBreakpoint(pBPRequest, m_engine, this);
             ppPendingBP = (IDebugPendingBreakpoint2)pendingBreakpoint;
             m_pendingBreakpoints.Add(pendingBreakpoint);
         }
@@ -120,12 +121,13 @@ namespace VSNDK.DebugEngine
 
             if (ret)
             {
-                m_activeBPs.Add(aBBP);
-
                 aBBP.GDB_ID = GDB_ID;
                 aBBP.GDB_FileName = GDB_Filename;
                 aBBP.GDB_LinePos = GDB_LinePos;
                 aBBP.GDB_Address = GDB_address;
+
+                m_activeBPs.Add(aBBP);
+
                 m_engine.Callback.OnBreakpointBound(aBBP, 0);
             }
             return (int)GDB_ID;
@@ -159,6 +161,7 @@ namespace VSNDK.DebugEngine
         {
             m_activeBPs.Remove(aBBP);        
             m_engine.eDispatcher.deleteBreakpoint(aBBP.GDB_ID);
+            m_engine.Callback.OnBreakpointUnbound(aBBP);
         }
     }
 }

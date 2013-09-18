@@ -68,18 +68,24 @@ namespace VSNDK.DebugEngine
             {
                 if (m_engine._currentThreadIndex != -1)
                 {
-                    EngineUtils.RequireOk(m_ad7Callback.Event(m_engine, null, program, m_engine.thread[m_engine._currentThreadIndex], eventObject, ref riidEvent, attributes));
+                    EngineUtils.RequireOk(m_ad7Callback.Event(m_engine, m_engine.m_process, program, m_engine.thread[m_engine._currentThreadIndex], eventObject, riidEvent, attributes));
                 }
                 else
                 {
                     if (m_engine.thread != null)
-                        EngineUtils.RequireOk(m_ad7Callback.Event(m_engine, null, program, m_engine.thread[0], eventObject, ref riidEvent, attributes));
+                        EngineUtils.RequireOk(m_ad7Callback.Event(m_engine, m_engine.m_process, program, m_engine.thread[0], eventObject, ref riidEvent, attributes));
                     else
-                        EngineUtils.RequireOk(m_ad7Callback.Event(m_engine, null, program, null, eventObject, ref riidEvent, attributes));
+                        EngineUtils.RequireOk(m_ad7Callback.Event(m_engine, m_engine.m_process, program, null, eventObject, ref riidEvent, attributes));
                 }
             }
             else
-                EngineUtils.RequireOk(m_ad7Callback.Event(m_engine, null, program, thread, eventObject, ref riidEvent, attributes));
+            {
+                if (m_engine != null)
+                    EngineUtils.RequireOk(m_ad7Callback.Event(m_engine, m_engine.m_process, program, thread, eventObject, ref riidEvent, attributes));
+                else
+                    EngineUtils.RequireOk(m_ad7Callback.Event(m_engine, null, program, thread, eventObject, ref riidEvent, attributes));
+
+            }
         }
 
 
@@ -219,6 +225,20 @@ namespace VSNDK.DebugEngine
 
             AD7BreakpointBoundEvent eventObject = new AD7BreakpointBoundEvent((AD7PendingBreakpoint)pendingBreakpoint, boundBreakpoint);
             Send(eventObject, AD7BreakpointBoundEvent.IID, null);
+        }
+
+
+        /// <summary>
+        /// Engines notify the debugger that a breakpoint has unbound through the breakpoint unbound event.
+        /// </summary>
+        /// <param name="objBoundBreakpoint"> The bounded breakpoint. </param>
+        /// <param name="address"> 0. </param>
+        public void OnBreakpointUnbound(object objBoundBreakpoint)
+        {
+            AD7BoundBreakpoint boundBreakpoint = (AD7BoundBreakpoint)objBoundBreakpoint;
+
+            AD7BreakpointUnboundEvent eventObject = new AD7BreakpointUnboundEvent(boundBreakpoint);
+            Send(eventObject, AD7BreakpointUnboundEvent.IID, null);
         }
 
 

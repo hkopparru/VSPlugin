@@ -244,12 +244,12 @@ namespace VSNDK.DebugEngine
         /// </summary>
         public void prepareToModifyBreakpoint()
         {
-            if (m_engine.m_state != AD7Engine.DE_STATE.DESIGN_MODE 
-             && m_engine.m_state != AD7Engine.DE_STATE.BREAK_MODE)
-            {
+//            if (m_engine.m_state != AD7Engine.DE_STATE.DESIGN_MODE 
+//             && m_engine.m_state != AD7Engine.DE_STATE.BREAK_MODE)
+//            {
                 HandleProcessExecution.m_needsResumeAfterInterrupt = true;
                 m_engine.CauseBreak();
-            }            
+//            }            
         }
 
 
@@ -692,6 +692,20 @@ namespace VSNDK.DebugEngine
         /// <param name="threadID"> Thread ID. </param>
         public void breakpointHit(uint ID, string threadID)
         {
+            // Transition DE state
+            EventDispatcher.m_GDBRunMode = false;
+
+            m_engine.m_running.WaitOne();
+
+            // If it is already in break mode, it means that there are more than one feature that wants to execute and all of them have
+            // to terminate before continuing execution.
+            if (m_engine.m_state == AD7Engine.DE_STATE.BREAK_MODE)
+                m_engine.interruptCounter += 1;
+            else
+                m_engine.m_state = AD7Engine.DE_STATE.BREAK_MODE;
+
+            m_engine.m_running.Set();
+
             var xBoundBreakpoints = new List<IDebugBoundBreakpoint2>();
 
             // Search the active bound BPs and find ones that match the ID.
@@ -743,26 +757,12 @@ namespace VSNDK.DebugEngine
                     }
                     if (!breakExecution) // must continue the execution
                     {
-                        bool hitBreakAll = m_engine.m_running.WaitOne(0);
-                        if (hitBreakAll)
-                        {
-                            m_engine.m_state = AD7Engine.DE_STATE.RUN_MODE;
-
-                            // Sends the GDB command that resumes the execution of the inferior program. 
-                            // (http://sourceware.org/gdb/onlinedocs/gdb/GDB_002fMI-Program-Execution.html)
-                            GDBParser.addGDBCommand(@"-exec-continue --thread-group i1");
-                            EventDispatcher.m_GDBRunMode = true;
-                            m_engine.m_running.Set();
-                        }
+                        continueExecution();
                     }
                     else
                     {
                         if (bbp.m_breakWhenCondChanged)
                             bbp.m_hitCount += 1;
-
-                        // Transition DE state
-                        EventDispatcher.m_GDBRunMode = false;
-                        m_engine.m_state = AD7Engine.DE_STATE.BREAK_MODE;
 
                         // Found a bound breakpoint
                         m_engine.Callback.OnBreakpoint(m_engine.selectThread(threadID), xBoundBreakpoints.AsReadOnly());
@@ -770,7 +770,7 @@ namespace VSNDK.DebugEngine
                         if (bbp.m_isHitCountEqual)
                         {
                             // Have to ignore the biggest number of times to keep the breakpoint enabled and to avoid stopping on it.
-                            ignoreHitCount(ID, int.MaxValue); 
+                            ignoreHitCount(ID, int.MaxValue);
                         }
                         else if (bbp.m_hitCountMultiple != 0)
                         {
@@ -787,17 +787,7 @@ namespace VSNDK.DebugEngine
                         Thread.Sleep(0);
                     }
 
-                    bool hitBreakAll = m_engine.m_running.WaitOne(0);
-                    if (hitBreakAll)
-                    {
-                        m_engine.m_state = AD7Engine.DE_STATE.RUN_MODE;
-
-                        // Sends the GDB command that resumes the execution of the inferior program. 
-                        // (http://sourceware.org/gdb/onlinedocs/gdb/GDB_002fMI-Program-Execution.html)
-                        GDBParser.addGDBCommand(@"-exec-continue --thread-group i1");
-                        EventDispatcher.m_GDBRunMode = true;
-                        m_engine.m_running.Set();
-                    }
+                    continueExecution();
 
                     leaveCriticalRegion();
                 }
@@ -948,8 +938,9 @@ namespace VSNDK.DebugEngine
         public void continueExecution()
         {
             //** Transition DE state
-            bool hitBreakAll = m_engine.m_running.WaitOne(0);
-            if (hitBreakAll)
+            m_engine.m_running.WaitOne();
+
+            if (m_engine.interruptCounter == 0)
             {
                 m_engine.m_state = AD7Engine.DE_STATE.RUN_MODE;
 
@@ -957,8 +948,13 @@ namespace VSNDK.DebugEngine
                 // (http://sourceware.org/gdb/onlinedocs/gdb/GDB_002fMI-Program-Execution.html)
                 GDBParser.addGDBCommand(@"-exec-continue --thread-group i1");
                 EventDispatcher.m_GDBRunMode = true;
-                m_engine.m_running.Set();
             }
+            else
+            {
+                m_engine.interruptCounter -= 1;
+            }
+
+            m_engine.m_running.Set();
         }
     }
 
@@ -1410,8 +1406,9 @@ namespace VSNDK.DebugEngine
                         case '4':  
                         // Program interrupted. 
                             // Examples:
-                            // 44,ADDR,FUNC,THREAD-ID         
-                            // 44,ADDR,FUNC,FILENAME,LINE,THREAD-ID
+                            // 44;
+                            // 44;ADDR;FUNC;THREAD-ID         
+                            // 44;ADDR;FUNC;FILENAME;LINE;THREAD-ID
 
                             m_eventDispatcher.engine.resetStackFrames();
                             EventDispatcher.m_GDBRunMode = false;
@@ -1422,74 +1419,90 @@ namespace VSNDK.DebugEngine
                                     numCommas++;
                             }
 
-                            ini = 3;
-                            end = ev.IndexOf(';', ini);
-                            m_address = Convert.ToInt32(ev.Substring(ini, (end - ini)), 16);
-
-                            ini = end + 1;
-                            end = ev.IndexOf(';', ini);
-                            m_func = ev.Substring(ini, (end - ini));
-
-                            if (m_func == "??")
+                            if (numCommas == 1)
                             {
-                                EventDispatcher.m_unknownCode = true;
+                                if (!m_eventDispatcher.engine.receivedInterruptSignal)
+                                {
+                                    // Call the method/event that will let SDM know that the debugged program was interrupted.
+                                    onInterrupt(m_threadId);
+
+                                    // Signal that interrupt is processed 
+                                    m_mre.Set();
+                                }
                             }
                             else
                             {
-                                EventDispatcher.m_unknownCode = false;
+                                m_eventDispatcher.engine.receivedInterruptSignal = true;
+
+                                ini = 3;
+                                end = ev.IndexOf(';', ini);
+                                m_address = Convert.ToInt32(ev.Substring(ini, (end - ini)), 16);
+
+                                ini = end + 1;
+                                end = ev.IndexOf(';', ini);
+                                m_func = ev.Substring(ini, (end - ini));
+
+                                if (m_func == "??")
+                                {
+                                    EventDispatcher.m_unknownCode = true;
+                                }
+                                else
+                                {
+                                    EventDispatcher.m_unknownCode = false;
+                                }
+
+                                switch (numCommas)
+                                {
+                                    case 3:
+                                        // Thread ID
+                                        ini = end + 1;
+                                        m_threadId = Convert.ToInt32(ev.Substring(ini, (ev.Length - ini)));
+                                        break;
+                                    case 4:
+                                        // Filename and line number
+                                        ini = end + 1;
+                                        end = ev.IndexOf(';', ini);
+                                        m_file = ev.Substring(ini, (end - ini));
+
+                                        ini = end + 1;
+                                        m_line = Convert.ToInt32(ev.Substring(ini, (ev.Length - ini)));
+                                        break;
+                                    case 5:
+                                        //  Filename, line number and thread ID
+                                        ini = end + 1;
+                                        end = ev.IndexOf(';', ini);
+                                        m_file = ev.Substring(ini, (end - ini));
+
+                                        ini = end + 1;
+                                        end = ev.IndexOf(';', ini);
+                                        m_line = Convert.ToInt32(ev.Substring(ini, (end - ini)));
+
+                                        ini = end + 1;
+                                        m_threadId = Convert.ToInt32(ev.Substring(ini, (ev.Length - ini)));
+                                        break;
+                                    default:
+                                        break;
+                                }
+
+                                this.m_eventDispatcher.engine.cleanEvaluatedThreads();
+
+
+                                if (m_eventDispatcher.engine._updateThreads)
+                                {
+                                    m_eventDispatcher.engine.UpdateListOfThreads();
+                                }
+                                if (m_threadId > 0)
+                                {
+                                    m_eventDispatcher.engine.selectThread(m_threadId.ToString()).setCurrentLocation(m_file, (uint)m_line);
+                                    m_eventDispatcher.engine.setAsCurrentThread(m_threadId.ToString());
+                                }
+
+                                // Call the method/event that will let SDM know that the debugged program was interrupted.
+                                onInterrupt(m_threadId);
+
+                                // Signal that interrupt is processed 
+                                m_mre.Set();
                             }
-
-                            switch (numCommas)
-                            {
-                                case 3:
-                                    // Thread ID
-                                    ini = end + 1;
-                                    m_threadId = Convert.ToInt32(ev.Substring(ini, (ev.Length - ini)));
-                                    break;
-                                case 4:
-                                    // Filename and line number
-                                    ini = end + 1;
-                                    end = ev.IndexOf(';', ini);
-                                    m_file = ev.Substring(ini, (end - ini));
-
-                                    ini = end + 1;
-                                    m_line = Convert.ToInt32(ev.Substring(ini, (ev.Length - ini)));
-                                    break;
-                                case 5:
-                                    //  Filename, line number and thread ID
-                                    ini = end + 1;
-                                    end = ev.IndexOf(';', ini);
-                                    m_file = ev.Substring(ini, (end - ini));
-
-                                    ini = end + 1;
-                                    end = ev.IndexOf(';', ini);
-                                    m_line = Convert.ToInt32(ev.Substring(ini, (end - ini)));
-
-                                    ini = end + 1;
-                                    m_threadId = Convert.ToInt32(ev.Substring(ini, (ev.Length - ini)));
-                                    break;
-                                default:
-                                    break;
-                            }
-
-                            this.m_eventDispatcher.engine.cleanEvaluatedThreads();
-
-
-                            if (m_eventDispatcher.engine._updateThreads)
-                            {
-                                m_eventDispatcher.engine.UpdateListOfThreads();
-                            }
-                            if (m_threadId > 0)
-                            {
-                                m_eventDispatcher.engine.selectThread(m_threadId.ToString()).setCurrentLocation(m_file, (uint)m_line);
-                                m_eventDispatcher.engine.setAsCurrentThread(m_threadId.ToString());
-                            }
-                            
-                            // Call the method/event that will let SDM know that the debugged program was interrupted.
-                            onInterrupt(m_threadId);
-
-                            // Signal that interrupt is processed 
-                            m_mre.Set();
 
                             break;
 
@@ -1815,7 +1828,9 @@ namespace VSNDK.DebugEngine
         {
             if (eventDispatcher.engine.m_state == AD7Engine.DE_STATE.STEP_MODE)
             {
+                eventDispatcher.engine.m_running.WaitOne();
                 eventDispatcher.engine.m_state = AD7Engine.DE_STATE.BREAK_MODE;
+                eventDispatcher.engine.m_running.Set();
 
                 // Visual Studio shows the line position one more than it actually is
                 eventDispatcher.engine.m_docContext = eventDispatcher.getDocumentContext(file, line - 1);
@@ -1830,8 +1845,16 @@ namespace VSNDK.DebugEngine
         /// <param name="threadID"> Thread ID. </param>
         private void onInterrupt(int threadID)
         {
-            Debug.Assert(m_eventDispatcher.engine.m_state == AD7Engine.DE_STATE.RUN_MODE);
-            m_eventDispatcher.engine.m_state = AD7Engine.DE_STATE.BREAK_MODE;
+            m_eventDispatcher.engine.m_running.WaitOne();
+
+            // If it is already in break mode, it means that there are more than one feature that wants to execute and all of them have
+            // to terminate before continuing execution.
+            if (m_eventDispatcher.engine.m_state == AD7Engine.DE_STATE.BREAK_MODE)
+                m_eventDispatcher.engine.interruptCounter += 1;
+            else
+                m_eventDispatcher.engine.m_state = AD7Engine.DE_STATE.BREAK_MODE;
+
+            m_eventDispatcher.engine.m_running.Set();
 
             if (m_file != "" && m_line > 0)
             {

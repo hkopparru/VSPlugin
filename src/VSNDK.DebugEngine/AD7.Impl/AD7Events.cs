@@ -669,6 +669,57 @@ namespace VSNDK.DebugEngine
 
 
     /// <summary>
+    /// This interface tells the session debug manager (SDM) that a bound breakpoint has been unbound from a loaded program.
+    /// (http://msdn.microsoft.com/en-us/library/bb146344.aspx)
+    /// </summary>
+    sealed class AD7BreakpointUnboundEvent : AD7AsynchronousEvent, IDebugBreakpointUnboundEvent2
+    {
+        public const string IID = "022608F9-C571-44C5-BD5B-307DBEA22160";
+        
+        private AD7BoundBreakpoint m_unboundBreakpoint;
+
+
+        /// <summary>
+        /// Constructor.
+        /// </summary>
+        /// <param name="boundBreakpoint"> The AD7BoundBreakpoint object that represents the breakpoint being bound. </param>
+        public AD7BreakpointUnboundEvent(AD7BoundBreakpoint boundBreakpoint)
+        {
+            m_unboundBreakpoint = boundBreakpoint;
+        }
+
+        #region IDebugBreakpointUnboundEvent2 Members
+
+        /// <summary>
+        /// Gets the breakpoint that became unbound. (http://msdn.microsoft.com/en-us/library/bb161315.aspx)
+        /// </summary>
+        /// <param name="boundBreakpoint"> Returns an IDebugBoundBreakpoint2 object that represents the breakpoint that became unbound. </param>
+        /// <returns> VSConstants.S_OK. </returns>
+        int IDebugBreakpointUnboundEvent2.GetBreakpoint(out IDebugBoundBreakpoint2 boundBreakpoint)
+        {
+            boundBreakpoint = m_unboundBreakpoint;
+            return VSConstants.S_OK;
+        }
+
+
+        /// <summary>
+        /// Gets the reason the breakpoint was unbound. (http://msdn.microsoft.com/en-us/library/bb145112.aspx)
+        /// </summary>
+        /// <param name="pdwUnboundReason"> Returns a value from the enum_BP_UNBOUND_REASON enumeration specifying the reason the 
+        /// breakpoint was unbound. </param>
+        /// <returns> VSConstants.S_OK. </returns>
+        int IDebugBreakpointUnboundEvent2.GetReason(enum_BP_UNBOUND_REASON[] pdwUnboundReason)
+        {
+            pdwUnboundReason = new enum_BP_UNBOUND_REASON[1];
+            pdwUnboundReason[0] = enum_BP_UNBOUND_REASON.BPUR_UNKNOWN;
+            return VSConstants.S_OK;
+        }
+
+        #endregion
+    }
+
+
+    /// <summary>
     /// The debug engine (DE) sends this interface to the session debug manager (SDM) when a program stops at a breakpoint.
     /// (http://msdn.microsoft.com/en-us/library/bb145927.aspx)
     /// </summary>

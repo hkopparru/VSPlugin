@@ -350,7 +350,7 @@ namespace VSNDK.DebugEngine
             {
                 isRunning = true;
                 m_engine.eDispatcher.prepareToModifyBreakpoint();
-                m_engine.m_state = AD7Engine.DE_STATE.BREAK_MODE;
+//                m_engine.m_state = AD7Engine.DE_STATE.BREAK_MODE;
             }
 
             m_bpCondition = bpCondition;
@@ -405,7 +405,7 @@ namespace VSNDK.DebugEngine
             if (isRunning)
             {
                 isRunning = false;
-                m_engine.m_state = AD7Engine.DE_STATE.RUN_MODE;
+//                m_engine.m_state = AD7Engine.DE_STATE.RUN_MODE;
                 m_engine.eDispatcher.resumeFromInterrupt();
             }
 
@@ -429,6 +429,7 @@ namespace VSNDK.DebugEngine
                 m_deleted = true;
                 m_pendingBreakpoint.OnBoundBreakpointDeleted(this);                
                 m_engine.BPMgr.RemoteDelete(this);
+                m_engine.BPMgr.m_pendingBreakpoints.Remove(m_pendingBreakpoint);
                 m_remoteID = -1;
             }
             return VSConstants.S_OK;
