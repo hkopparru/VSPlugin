@@ -29,6 +29,7 @@ public:
 	static String^ GetPIDsThroughGDB(String^, String^, bool, String^, String^, int);
 	static bool LaunchProcess(String^, String^, String^, bool, String^, String^, String^);	
     static void BlackBerryConnect(String^, String^, String^, String^);
+	static void setNDKVars(bool);
 
 	static String^ parseCommand(String^, int);
 	static String^ removeGDBResponse(); 
@@ -38,15 +39,14 @@ public:
 
 	static bool s_running = false;
 
-private:
-	static void setNDKVars(bool);
-
-	static DWORD s_mainThreadId;
-	static String^ m_pcGDBCmd;
 	static const int NUM_LIB_PATHS = 2;
+	static String^ m_pcGDBCmd;
 	static array<String^>^ m_libPaths = gcnew array<String^>(NUM_LIB_PATHS);
     static HANDLE m_BBConnectProcess;
 	static String^ m_remotePath;
+
+private:
+	static DWORD s_mainThreadId;
 };
 
 END_NAMESPACE
@@ -57,6 +57,9 @@ BEGIN_NAMESPACE
 public ref class GDBParserUnitTests abstract sealed
 {
 public:	
+	static String^ Decrypt(String^);
+	static String^ GDBTests();
+
 	static int get_Instruction_Code(String^, [Runtime::InteropServices::Out] String^ %);
 	static int get_Seq_ID(String^);
 	static bool inserting_Command_Codes(array<String^, 2>^, array<String^>^);

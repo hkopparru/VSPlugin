@@ -567,7 +567,7 @@ namespace VSNDK.DebugEngine
         /// <param name="process"> Returns the resulting IDebugProcess2 object that represents the launched process. </param>
         /// <returns> If successful, returns S_OK; otherwise, returns an error code. </returns>
         int IDebugEngineLaunch2.LaunchSuspended(string pszServer, IDebugPort2 port, string exe, string args, string dir, string env, string options, enum_LAUNCH_FLAGS launchFlags, uint hStdInput, uint hStdOutput, uint hStdError, IDebugEventCallback2 ad7Callback, out IDebugProcess2 process)
-        {            
+        {
             Debug.Assert(m_programGUID == Guid.Empty);
 
             process = null;

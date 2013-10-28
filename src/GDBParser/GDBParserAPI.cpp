@@ -20,9 +20,15 @@
 #include < stdio.h >
 #include < stdlib.h >
 #include < vcclr.h >
+
+#using <System.Security.dll>
+
 using namespace System;
+using namespace System::Text;
 using namespace System::Text::RegularExpressions;
 using namespace Microsoft::Win32;
+
+using namespace System::Security::Cryptography;
 
 #include "ProjInclude.h"
 
@@ -464,6 +470,441 @@ bool GDBParser::LaunchProcess(String^ pidStr, String^ exeStr, String^ IPAddrStr,
 // for something else because they need some resources that are allocated correctly when launching GDB the right way, i.e., by using the 
 // above GDBParser::LaunchProcess method. To be able to run the unit tests, it is needed to create mock resources or call 
 // GDBParser::LaunchProcess method first, because it will allocate the needed resources and will start GDB. 
+
+
+
+
+/// <summary>
+/// Helper Function to Decrypt Password
+/// </summary>
+/// <param name="cipher"></param>
+/// <returns></returns>
+String^ GDBParserUnitTests::Decrypt(String^ cipher)
+{
+//    if (cipher == NULL) throw gcnew ArgumentNullException("cipher");
+
+	UnicodeEncoding^ unicode = gcnew UnicodeEncoding;
+
+    //parse base64 string
+    array<Byte>^data = Convert::FromBase64String(cipher);
+
+    //decrypt data
+    array<Byte>^decrypted = ProtectedData::Unprotect(data, nullptr , DataProtectionScope::LocalMachine);
+
+    return unicode->GetString(decrypted);
+}
+
+
+/// <summary> 
+/// Build the package; deploy it; start GDB; start debugging in GDB only by sending the commands direclty (hard-coded);
+/// end the GDB debugging session. The Parsed-Output.log file is generated and will be evaluated by the associated Unit Tests.
+/// </summary>
+/// <param name="IPAddrStr"> Device/Simulator IP. </param>
+/// <param name="isSimulator"> TRUE when using the Simulator, FALSE when using the Device. </param>
+/// <param name="password"> Device/simulator password. </param>
+/// <returns> True -> succeeded;
+/// False -> failed. </returns>
+String^ GDBParserUnitTests::GDBTests()
+{
+	string response;
+	string parsed;
+    GDBParser::s_running = true;
+    GDBParser::m_BBConnectProcess = NULL;
+	char pcCmd[256];
+
+	String^ password;
+	bool isSimulator = false;
+
+	String^ keyPath = "HKEY_CURRENT_USER\\Software\\BlackBerry\\BlackBerryVSPlugin";
+	String^ QNX_HOST = (String^)Registry::GetValue(keyPath, "NDKHostPath", "");
+	String^ IP = (String^)Registry::GetValue(keyPath, "device_IP", "");
+	if (IP == "")
+	{
+		isSimulator = true;
+		IP = (String^)Registry::GetValue(keyPath, "simulator_IP", "");
+	}
+
+	if (IP != "")
+	{
+		if (isSimulator)
+		{
+			password = (String^)Registry::GetValue(keyPath, "simulator_password", "");
+		}
+		else
+		{
+			password = (String^)Registry::GetValue(keyPath, "device_password", "");
+		}
+		password = Decrypt(password);
+	}
+	else
+		return "Missing IP.";
+
+	String^ Target = (isSimulator) ? "Simulator" : "Device";
+
+	String^ projectName = "FallingBlocks_MltThrd_001";
+	String^ projectFolder = "C:\\TestGDB\\" + projectName + "\\" + projectName;
+	String^ executablePath = projectFolder + "\\" + Target + "-Debug\\" + projectName;
+	executablePath = executablePath->Replace("\\","\\\\");
+
+    String^ args;
+    String^ pCommand;
+	String^ output;
+	String^ error;
+
+	//Launch blackberry-nativepackager
+	pCommand = QNX_HOST + "\\usr\\bin\\blackberry-nativepackager.bat";
+    args = "-target bar-debug -devMode \"" + Target + "-Debug\\" + projectName + ".bar\" \"BlackBerry-" + projectName + "\\bar-descriptor.xml\" \"LICENSE\" \"NOTICE\" \"icon.png\" -e \"" + Target + "-Debug\\" + projectName + "\" \"" + projectName + "\"";
+
+	System::Diagnostics::ProcessStartInfo^ procStartInfo = gcnew System::Diagnostics::ProcessStartInfo(pCommand, args);
+
+    // Set UseShellExecute to false for redirection.
+    procStartInfo->UseShellExecute = false;
+
+    // The following commands are needed to redirect the standard and error outputs.
+    // These streams are read asynchronously using an event handler.
+    procStartInfo->RedirectStandardOutput = true;
+    procStartInfo->RedirectStandardError = true;
+
+    // Setting the work directory.
+    procStartInfo->WorkingDirectory = projectFolder;
+
+    // Do not create the black window.
+    procStartInfo->CreateNoWindow = true;
+
+    // Create a process and assign its ProcessStartInfo
+    System::Diagnostics::Process^ proc = gcnew System::Diagnostics::Process();
+    proc->StartInfo = procStartInfo;
+
+    // Start the process
+    proc->Start();
+
+	output = proc->StandardOutput->ReadToEnd();
+	error = proc->StandardError->ReadToEnd();
+	proc->WaitForExit();
+
+	if (error != "")
+		return "blackberry-nativepackager command failed:\n\n" + error;
+
+	
+	//Launch blackberry-deploy
+	pCommand = QNX_HOST + "\\usr\\bin\\blackberry-deploy.bat";
+    args = "-installApp -launchApp -debugNative -device \"" + IP + "\" -password \"" + password + "\" -package \"" + projectFolder+ "\\" + Target + "-Debug\\" + projectName + ".bar\"";
+
+    procStartInfo = gcnew System::Diagnostics::ProcessStartInfo(pCommand, args);
+
+    // Set UseShellExecute to false for redirection.
+    procStartInfo->UseShellExecute = false;
+
+    // The following commands are needed to redirect the standard and error outputs.
+    // These streams are read asynchronously using an event handler.
+    procStartInfo->RedirectStandardOutput = true;
+    procStartInfo->RedirectStandardError = true;
+
+    // Setting the work directory.
+    procStartInfo->WorkingDirectory = projectFolder;
+
+    // Do not create the black window.
+    procStartInfo->CreateNoWindow = true;
+
+    // Create a process and assign its ProcessStartInfo
+    proc = gcnew System::Diagnostics::Process();
+    proc->StartInfo = procStartInfo;
+
+    // Start the process
+    proc->Start();
+
+	output = proc->StandardOutput->ReadToEnd();
+	error = proc->StandardError->ReadToEnd();
+	proc->WaitForExit();
+
+	if (error != "")
+		return "blackberry-deploy command failed:\n\n" + error;
+
+//	Get PId from output of blackberry-deploy command
+	String^ pidStr = "";
+	int pos = output->IndexOf("Info: done");
+	if (pos == -1)
+		return "Application not deployed succesfully. Verify the build output:\n\n" + output;
+
+	pos = output->LastIndexOf("result::", pos);
+	if (pos == -1)
+		return "Process ID not found. Verify the build output:\n\n" + output;
+
+	pos += 8; // size of "result::"
+	int end = output->IndexOf('\n', pos);
+	pidStr = output->Substring(pos, (end - pos) + 1);
+
+	String^ publicKeyPath = Environment::GetEnvironmentVariable("LOCALAPPDATA"); 
+	publicKeyPath += "\\Research In Motion\\bbt_id_rsa.pub";
+
+	
+	// Run BlackBerryConnect
+    GDBParser::BlackBerryConnect(IP, QNX_HOST + "\\usr\\bin", publicKeyPath, password);
+
+	
+	// Get PID
+	CAutoPtr <char> apPid = convertToAutoPtrFromString(pidStr);	
+	long int pid = strtol(apPid, NULL, 10);	
+	if (pid == 0) {
+		return "Invalid process ID. Current value: " + pidStr + ".\n\nBuild output:\n " + output;
+	}
+
+	// Set NDK Variables
+	GDBParser::setNDKVars(isSimulator);	
+	
+	// Convert GDB command to wchar_t* since GDBWrapper.exe requires a Unicode argument
+	pin_ptr<const wchar_t> pkwcGDBCmd = PtrToStringChars(GDBParser::m_pcGDBCmd);
+    const size_t newsizew = (wcslen(pkwcGDBCmd) + 1) * sizeof(wchar_t);
+    wchar_t* pwcGDBCmd = new wchar_t[newsizew];
+    wcscpy_s(pwcGDBCmd, newsizew, pkwcGDBCmd);
+	CAutoPtr <wchar_t> apGDBCmd;
+	apGDBCmd.Attach(pwcGDBCmd);
+
+	// Get GDB Console
+	GDBConsole::setGDBPath(apGDBCmd);	
+	GDBConsole* console = GDBConsole::getInstance();	
+
+	// Convert library paths
+	CAutoPtr <char> libPaths[GDBParser::NUM_LIB_PATHS];
+	for (int i = 0; i < GDBParser::NUM_LIB_PATHS; i++) {
+		libPaths[i] = convertToAutoPtrFromString(GDBParser::m_libPaths[i]);
+	}
+	
+    // initializing the parsing data structures, buffers and thread
+	HANDLE sendingThread;
+	unsigned threadID;
+	unordered_map<string, int> commandCodesMap;
+	string parsingInstructions[NumberOfInstructions];
+
+	cleanBuffers();
+	if(!insertingCommandCodes(&commandCodesMap, parsingInstructions))
+	{
+		return "Error when initializing parsing data structures.";
+	}
+
+	/// Send intialization commands to GDB
+	response = console->waitForPrompt(true);
+	parsed = parseGDB(response, parsingInstructions[2]);
+	if ((parsed == "") || (parsed[0] == '!')) //found an error
+	{
+		return "Failed to initialize GDB.\n\nGDB response:\n" + gcnew String(response.c_str()) + "\n\nParsed response:\n" + gcnew String(parsed.c_str());
+	}
+
+//	sprintf(pcCmd, "set debug nto-debug 2\r\n");
+//	console->sendCommand(pcCmd);
+//	response = console->waitForPrompt(true);
+
+	sprintf(pcCmd, "1-gdb-set breakpoint pending on\r\n");
+	console->sendCommand(pcCmd);
+	response = console->waitForPrompt(true);
+	parsed = parseGDB(response, parsingInstructions[8]);
+	if ((parsed == "") || (parsed[0] == '!')) //found an error
+	{
+		return "\"1-gdb-set breakpoint pending on\" command failed.\n\nGDB response:\n" + gcnew String(response.c_str()) + "\n\nParsed response:\n" + gcnew String(parsed.c_str());
+	}
+
+	// Convert device (IP address)
+	CAutoPtr <char> apDevice = convertToAutoPtrFromString(IP);
+
+	sprintf(pcCmd, "4-target-select qnx %s:8000\r\n", apDevice);
+	console->sendCommand(pcCmd);
+	response = console->waitForPrompt(true);
+	parsed = parseGDB(response, parsingInstructions[3]);
+	if ((parsed == "") || (parsed[0] == '!')) //found an error
+	{
+		return "\"4-target-select qnx " + IP + ":8000\" command failed.\n\nGDB response:\n" + gcnew String(response.c_str()) + "\n\nParsed response:\n" + gcnew String(parsed.c_str());
+	}
+
+	// Convert binary file path	
+	CAutoPtr <char> apBinaryFile = convertToAutoPtrFromString(executablePath);
+
+	sprintf(pcCmd, "5-file-exec-and-symbols %s\r\n", apBinaryFile);		
+	console->sendCommand(pcCmd);
+	response = console->waitForPrompt(true);
+	parsed = parseGDB(response, parsingInstructions[7]);
+	if ((parsed == "") || (parsed[0] == '!')) //found an error
+	{
+		return "\"5-file-exec-and-symbols " + executablePath + "\" command failed.\n\nGDB response:\n" + gcnew String(response.c_str()) + "\n\nParsed response:\n" + gcnew String(parsed.c_str());
+	}
+	
+	if (GDBParser::m_remotePath != "")
+	{
+		GDBParser::m_remotePath = GDBParser::m_remotePath + "\\lib;" + GDBParser::m_remotePath + "\\usr\\lib;" + GDBParser::m_remotePath + "\\usr\\lib\\qt4";
+		CAutoPtr <char> apPath = convertToAutoPtrFromString(GDBParser::m_remotePath);
+		sprintf(pcCmd, "6set solib-search-path %s\r\n", apPath );		
+		console->sendCommand(pcCmd);
+		response = console->waitForPrompt(true);
+		parsed = parseGDB(response, parsingInstructions[8]);
+		if ((parsed == "") || (parsed[0] == '!')) //found an error
+		{
+			return "\"6set solib-search-path " + GDBParser::m_remotePath + "\" command failed.\n\nGDB response:\n" + gcnew String(response.c_str()) + "\n\nParsed response:\n" + gcnew String(parsed.c_str());
+		}
+	}
+	
+	sprintf(pcCmd, "7-target-attach %d\r\n", pid);
+	console->sendCommand(pcCmd);
+	response = console->waitForPrompt(true);
+	parsed = parseGDB(response, parsingInstructions[6]);
+	if ((parsed == "") || (parsed[0] == '!')) //found an error
+	{
+		return "\"7-target-attach " + pid + "\" command failed.\n\nGDB response:\n" + gcnew String(response.c_str()) + "\n\nParsed response:\n" + gcnew String(parsed.c_str());
+	}
+	
+//	start thread responsible for reading InputBuffer and sending commands to GDB.
+//	Thread must start after initializing GDB with the previous instructions because:
+//  - this thread will start another one (listening GDB) that will start consuming GDB responses. So, the above waitForPrompt would 
+//	  never get a result and this method would freeze.
+//  - the previous commands don't use the GDB Buffer, so the results wouldn't be parsed correctly.
+	sendingThread = (HANDLE)_beginthreadex( NULL, 0, &sendingCommands2GDB, (void *)console, 0, &threadID);
+
+//	Sequence of GDB commands
+	GDBParser::parseCommand("-break-insert --thread-group i1 -f C:\\TestGDB\\FALLIN~1\\FALLIN~1\\main.c:141", 6);
+
+	String^ bpointAddress = GDBParser::parseCommand("info b 1", 18);
+	GDBParser::parseCommand("info line *" + bpointAddress, 18);
+
+	GDBParser::parseCommand("-break-insert --thread-group i1 -f C:\\TestGDB\\FALLIN~1\\FALLIN~1\\main.c:373", 6);
+
+	bpointAddress = GDBParser::parseCommand("info b 2", 18);
+	GDBParser::parseCommand("info line *" + bpointAddress, 18);
+
+	GDBParser::addGDBCommand("-exec-continue --thread-group i1");
+	Sleep(2500);
+	GDBParser::addGDBCommand("-exec-continue --thread-group i1");
+	Sleep(1500);
+	GDBParser::addGDBCommand("-exec-continue --thread-group i1");
+	Sleep(1500);
+	GDBParser::addGDBCommand("-exec-continue --thread-group i1");
+	Sleep(1500);
+	clean_Buffers();
+	GDBParser::addGDBCommand("-exec-continue --thread-group i1");
+	Sleep(1500);
+	GDBParser::addGDBCommand("-exec-continue --thread-group i1");
+	Sleep(1500);
+	GDBParser::addGDBCommand("-exec-continue --thread-group i1");
+	Sleep(1500);
+	GDBParser::addGDBCommand("-exec-continue --thread-group i1");
+	Sleep(1500);
+	GDBParser::addGDBCommand("-exec-continue --thread-group i1");
+	Sleep(1500);
+	GDBParser::addGDBCommand("-exec-continue --thread-group i1");
+	Sleep(1500);
+	GDBParser::addGDBCommand("-exec-continue --thread-group i1");
+	Sleep(1500);
+	clean_Buffers();
+	GDBParser::parseCommand("-break-delete 2", 7);
+	GDBParser::addGDBCommand("-exec-continue --thread-group i1");
+	Sleep(1500);
+	GDBParser::addGDBCommand("-exec-next --thread 1");
+	Sleep(1500);
+	GDBParser::addGDBCommand("-exec-step --thread 1");
+	Sleep(1500);
+	GDBParser::addGDBCommand("-exec-finish --thread 1 --frame 0");
+	Sleep(1500);
+	clean_Buffers();
+	GDBParser::addGDBCommand("-exec-step --thread 1");
+	Sleep(1500);
+	GDBParser::addGDBCommand("-exec-finish --thread 1 --frame 0");
+	Sleep(1500);
+	GDBParser::addGDBCommand("-exec-next --thread 1");
+	Sleep(1500);
+	GDBParser::addGDBCommand("-exec-continue --thread-group i1");
+	Sleep(1500);
+	clean_Buffers();
+	GDBParser::addGDBCommand("-exec-continue --thread-group i1");
+	Sleep(1500);
+	GDBParser::parseCommand("-break-disable 1", 8);
+	GDBParser::addGDBCommand("-exec-continue --thread-group i1");
+	Sleep(1500);
+	GDBParser::addGDBCommand("-exec-interrupt");
+	Sleep(3000);
+	GDBParser::parseCommand("-break-enable 1", 8);
+	GDBParser::addGDBCommand("-exec-continue --thread-group i1");
+	Sleep(1500);
+	clean_Buffers();
+	GDBParser::addGDBCommand("-exec-continue --thread-group i1");
+	Sleep(1500);
+	GDBParser::parseCommand("-break-after 1 43", 18);
+	clean_Buffers();
+	GDBParser::addGDBCommand("-exec-continue --thread-group i1");
+	Sleep(8500);
+	clean_Buffers();
+	GDBParser::parseCommand("-break-delete 1", 7);
+	GDBParser::parseCommand("-break-insert --thread-group i1 -f C:\\TestGDB\\FALLIN~1\\FALLIN~1\\main.c:141", 6);
+
+	bpointAddress = GDBParser::parseCommand("info b 3", 18);
+	GDBParser::parseCommand("info line *" + bpointAddress, 18);
+
+	GDBParser::parseCommand("-break-after 3 44", 18);
+	clean_Buffers();
+	GDBParser::parseCommand("-break-condition 3 abc==0", 19);
+	clean_Buffers();
+	GDBParser::addGDBCommand("-exec-continue --thread-group i1");
+	Sleep(8500);
+	clean_Buffers();
+	GDBParser::parseCommand("-break-delete 3", 7);
+	GDBParser::parseCommand("-break-insert --thread-group i1 -f C:\\TestGDB\\FALLIN~1\\FALLIN~1\\main.c:141", 6);
+
+	bpointAddress = GDBParser::parseCommand("info b 4", 18);
+	GDBParser::parseCommand("info line *" + bpointAddress, 18);
+
+	GDBParser::parseCommand("-break-after 4 44", 18);
+	GDBParser::parseCommand("-break-condition 4", 19);
+	clean_Buffers();
+	GDBParser::addGDBCommand("-exec-continue --thread-group i1");
+	Sleep(3500);
+	clean_Buffers();
+	GDBParser::addGDBCommand("-exec-interrupt");
+	Sleep(1500);
+	GDBParser::parseCommand("-break-after 4 0", 18);
+	GDBParser::addGDBCommand("-exec-continue --thread-group i1");
+	Sleep(1500);
+	clean_Buffers();
+	GDBParser::parseCommand("-stack-list-frames", 10);
+	GDBParser::parseCommand("-stack-list-variables --thread 1 --frame 0 --simple-values", 11);
+	GDBParser::parseCommand("-var-create boxes \"*\" boxes", 13);
+	GDBParser::parseCommand("-var-list-children --all-values boxes 0 50", 15); 
+	GDBParser::parseCommand("-data-evaluate-expression \"boxes\"", 2);
+	GDBParser::parseCommand("whatis boxes", 3);
+	GDBParser::parseCommand("ptype boxes", 4);
+	GDBParser::parseCommand("-data-evaluate-expression \"boxes->x\"", 2);
+	GDBParser::parseCommand("whatis boxes->x", 3);
+	GDBParser::parseCommand("ptype boxes->x", 4);
+	GDBParser::parseCommand("-data-evaluate-expression \"boxes[0]->x\"", 2);
+	GDBParser::parseCommand("whatis boxes[0]->x", 3);
+	GDBParser::parseCommand("ptype boxes[0]->x", 4);
+	GDBParser::parseCommand("-data-evaluate-expression \"xyz\"", 2);
+	GDBParser::parseCommand("whatis xyz", 3);
+	GDBParser::parseCommand("ptype xyz", 4);
+	clean_Buffers();
+	GDBParser::parseCommand("-var-delete boxes", 14);
+	GDBParser::parseCommand("-thread-info", 22);
+	GDBParser::parseCommand("-stack-select-frame 0", 5);
+	GDBParser::parseCommand("-stack-info-depth --thread 1 --frame 0", 9);
+	GDBParser::parseCommand("-data-evaluate-expression \"10\"", 2);
+	GDBParser::parseCommand("whatis 10", 3);
+	GDBParser::parseCommand("ptype 10", 4);
+	GDBParser::parseCommand("-data-evaluate-expression \"10*3-4/2\"", 2);
+	GDBParser::parseCommand("whatis 10*3-4/2", 3);
+	GDBParser::parseCommand("ptype 10*3-4/2", 4);
+	GDBParser::parseCommand("-data-evaluate-expression \"10#3-4/2\"", 2);
+	GDBParser::parseCommand("whatis 10#3-4/2", 3);
+	GDBParser::parseCommand("ptype 10#3-4/2", 4);
+	GDBParser::parseCommand("-thread-select 2", 12);
+	GDBParser::addGDBCommand("-exec-continue --thread-group i1");
+	Sleep(1500);
+	clean_Buffers();
+	GDBParser::addGDBCommand("-exec-continue --thread-group i1");
+	Sleep(1500);
+	GDBParser::parseCommand("-break-delete 4", 7);
+	GDBParser::addGDBCommand("-exec-continue --thread-group i1");
+	Sleep(1500);
+	GDBParser::addGDBCommand("-exec-interrupt");
+	Sleep(1500);
+	GDBParser::parseCommand("kill", 16);
+
+	return "";
+}
 
 
 /// <summary> 

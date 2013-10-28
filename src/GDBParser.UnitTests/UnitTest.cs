@@ -10,6 +10,11 @@ namespace GDBParser_UnitTests
     public class UnitTests
     {
         [Test]
+        public void TestGDB()
+        {
+            StringAssert.AreEqualIgnoringCase("", GDBParserUnitTests.GDBTests(), "GDB Error.");
+        }
+        [Test]
         public void GetNextChar()
         {
             Assert.AreEqual(0, GDBParserUnitTests.get_Next_Char(Convert.ToSByte('a'), "abcdefghij", 0), "Error: char 'a', string 'abcdefghij', int '0'");
