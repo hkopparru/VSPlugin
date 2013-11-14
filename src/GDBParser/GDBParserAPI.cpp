@@ -763,10 +763,10 @@ String^ GDBParserUnitTests::GDBTests()
 	String^ bpointAddress = GDBParser::parseCommand("info b 1", 18);
 	GDBParser::parseCommand("info line *" + bpointAddress, 18);
 
-	GDBParser::parseCommand("-break-insert --thread-group i1 -f C:\\TestGDB\\FALLIN~1\\FALLIN~1\\main.c:373", 6);
+//	GDBParser::parseCommand("-break-insert --thread-group i1 -f C:\\TestGDB\\FALLIN~1\\FALLIN~1\\main.c:373", 6);
 
-	bpointAddress = GDBParser::parseCommand("info b 2", 18);
-	GDBParser::parseCommand("info line *" + bpointAddress, 18);
+//	bpointAddress = GDBParser::parseCommand("info b 2", 18);
+//	GDBParser::parseCommand("info line *" + bpointAddress, 18);
 
 	GDBParser::addGDBCommand("-exec-continue --thread-group i1");
 	Sleep(2500);
@@ -792,7 +792,7 @@ String^ GDBParserUnitTests::GDBTests()
 	GDBParser::addGDBCommand("-exec-continue --thread-group i1");
 	Sleep(1500);
 	clean_Buffers();
-	GDBParser::parseCommand("-break-delete 2", 7);
+//	GDBParser::parseCommand("-break-delete 2", 7);
 	GDBParser::addGDBCommand("-exec-continue --thread-group i1");
 	Sleep(1500);
 	GDBParser::addGDBCommand("-exec-next --thread 1");
@@ -817,7 +817,7 @@ String^ GDBParserUnitTests::GDBTests()
 	GDBParser::addGDBCommand("-exec-continue --thread-group i1");
 	Sleep(1500);
 	GDBParser::addGDBCommand("-exec-interrupt");
-	Sleep(3000);
+	Sleep(4500);
 	GDBParser::parseCommand("-break-enable 1", 8);
 	GDBParser::addGDBCommand("-exec-continue --thread-group i1");
 	Sleep(1500);
@@ -832,31 +832,38 @@ String^ GDBParserUnitTests::GDBTests()
 	GDBParser::parseCommand("-break-delete 1", 7);
 	GDBParser::parseCommand("-break-insert --thread-group i1 -f C:\\TestGDB\\FALLIN~1\\FALLIN~1\\main.c:141", 6);
 
-	bpointAddress = GDBParser::parseCommand("info b 3", 18);
+	bpointAddress = GDBParser::parseCommand("info b 2", 18);
+//	bpointAddress = GDBParser::parseCommand("info b 3", 18);
 	GDBParser::parseCommand("info line *" + bpointAddress, 18);
 
-	GDBParser::parseCommand("-break-after 3 44", 18);
-	clean_Buffers();
-	GDBParser::parseCommand("-break-condition 3 abc==0", 19);
+	GDBParser::parseCommand("-break-after 2 44", 18);
+//	GDBParser::parseCommand("-break-after 3 44", 18);
+	GDBParser::parseCommand("-break-condition 2 abc==0", 19);
+//	GDBParser::parseCommand("-break-condition 3 abc==0", 19);
 	clean_Buffers();
 	GDBParser::addGDBCommand("-exec-continue --thread-group i1");
 	Sleep(8500);
 	clean_Buffers();
-	GDBParser::parseCommand("-break-delete 3", 7);
+	GDBParser::parseCommand("-break-delete 2", 7);
+//	GDBParser::parseCommand("-break-delete 3", 7);
 	GDBParser::parseCommand("-break-insert --thread-group i1 -f C:\\TestGDB\\FALLIN~1\\FALLIN~1\\main.c:141", 6);
 
-	bpointAddress = GDBParser::parseCommand("info b 4", 18);
+	bpointAddress = GDBParser::parseCommand("info b 3", 18);
+//	bpointAddress = GDBParser::parseCommand("info b 4", 18);
 	GDBParser::parseCommand("info line *" + bpointAddress, 18);
 
-	GDBParser::parseCommand("-break-after 4 44", 18);
-	GDBParser::parseCommand("-break-condition 4", 19);
+	GDBParser::parseCommand("-break-after 3 44", 18);
+//	GDBParser::parseCommand("-break-after 4 44", 18);
+	GDBParser::parseCommand("-break-condition 3", 19);
+//	GDBParser::parseCommand("-break-condition 4", 19);
 	clean_Buffers();
 	GDBParser::addGDBCommand("-exec-continue --thread-group i1");
-	Sleep(3500);
-	clean_Buffers();
+	Sleep(2500);
 	GDBParser::addGDBCommand("-exec-interrupt");
-	Sleep(1500);
-	GDBParser::parseCommand("-break-after 4 0", 18);
+	Sleep(4500);
+	GDBParser::parseCommand("-break-after 3 0", 18);
+//	GDBParser::parseCommand("-break-after 4 0", 18);
+	clean_Buffers();
 	GDBParser::addGDBCommand("-exec-continue --thread-group i1");
 	Sleep(1500);
 	clean_Buffers();
@@ -896,12 +903,59 @@ String^ GDBParserUnitTests::GDBTests()
 	clean_Buffers();
 	GDBParser::addGDBCommand("-exec-continue --thread-group i1");
 	Sleep(1500);
-	GDBParser::parseCommand("-break-delete 4", 7);
+	GDBParser::parseCommand("-break-delete 3", 7);
+//	GDBParser::parseCommand("-break-delete 4", 7);
 	GDBParser::addGDBCommand("-exec-continue --thread-group i1");
 	Sleep(1500);
+
 	GDBParser::addGDBCommand("-exec-interrupt");
+	Sleep(4500);
+
+	GDBParser::parseCommand("-break-insert udate", 6);
+	GDBParser::addGDBCommand("-exec-continue --thread-group i1");
+	Sleep(2500);
+	GDBParser::addGDBCommand("-exec-interrupt");
+	Sleep(4500);
+
+	GDBParser::parseCommand("-break-insert update", 6);
+	bpointAddress = GDBParser::parseCommand("info b 4", 18);
+//	bpointAddress = GDBParser::parseCommand("info b 5", 18);
+	GDBParser::parseCommand("info line *" + bpointAddress, 18);
+	GDBParser::addGDBCommand("-exec-continue --thread-group i1");
+	Sleep(2500);
+	GDBParser::parseCommand("-break-delete 4", 7);
+//	GDBParser::parseCommand("-break-delete 5", 7);
+
+	GDBParser::parseCommand("-break-insert --thread-group i1 -f C:\\TestGDB\\FALLIN~1\\FALLIN~1\\main.c:156", 6);
+	bpointAddress = GDBParser::parseCommand("info b 5", 18);
+//	bpointAddress = GDBParser::parseCommand("info b 6", 18);
+	GDBParser::parseCommand("info line *" + bpointAddress, 18);
+	GDBParser::addGDBCommand("-exec-continue --thread-group i1");
+	Sleep(2500);
+
+	GDBParser::parseCommand("-data-evaluate-expression \"boxes->y\"", 2);
+	GDBParser::parseCommand("whatis boxes->y", 3);
+	GDBParser::parseCommand("ptype boxes->y", 4);
+
+	GDBParser::parseCommand("-data-evaluate-expression \"abc\"", 2);
+	GDBParser::parseCommand("whatis abc", 3);
+	GDBParser::parseCommand("ptype abc", 4);
+
+	GDBParser::parseCommand("-data-evaluate-expression \"box_t\"", 2);
+	GDBParser::parseCommand("whatis box_t", 3);
+	GDBParser::parseCommand("ptype box_t", 4);
+
+	GDBParser::parseCommand("-break-delete 5", 7);
+//	GDBParser::parseCommand("-break-delete 6", 7);
+	GDBParser::addGDBCommand("-exec-continue --thread-group i1");
 	Sleep(1500);
+
+	GDBParser::addGDBCommand("-exec-interrupt");
+	Sleep(4500);
 	GDBParser::parseCommand("kill", 16);
+
+	Sleep(3500);
+	GDBParser::exitGDB();
 
 	return "";
 }

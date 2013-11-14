@@ -10,10 +10,550 @@ namespace GDBParser_UnitTests
     public class UnitTests
     {
         [Test]
-        public void TestGDB()
+        public void _TestGDB()
         {
             StringAssert.AreEqualIgnoringCase("", GDBParserUnitTests.GDBTests(), "GDB Error.");
         }
+        [Test]
+        public void CompareGDBFiles()
+        {
+            string obtainedFile = "", originalFile = "", errorsFile = "";
+            System.IO.StreamReader obtainedFileStream = null;
+            try
+            {
+                obtainedFileStream = new System.IO.StreamReader(Environment.GetEnvironmentVariable("APPDATA") + "\\BlackBerry\\parsedGDBResponse-output.log");
+                obtainedFile = obtainedFileStream.ReadToEnd();
+                obtainedFileStream.Close();
+            }
+            catch (Exception e)
+            {
+                obtainedFile = "";
+            }
+
+            if (obtainedFile == "")
+            {
+                errorsFile = "You have to run the test \"_TestGDB\" first, to generate the file \"parsedGDBResponse-output.log\".";
+            }
+            else
+            {
+                originalFile = obtainedFile;
+
+                obtainedFile = obtainedFile.Replace("\"0x0\"", "NULL");
+
+                while (obtainedFile.Contains("$\r\n$GDB - *running,thread-id="))
+                {
+                    int p1 = obtainedFile.IndexOf("$\r\n$GDB - *running,thread-id=\"all\"");
+                    int p2 = obtainedFile.IndexOf("\r\n$\r\n", p1);
+                    obtainedFile = obtainedFile.Substring(0, p1) + obtainedFile.Substring(p2 + 1);
+                }
+
+                int end, pos = obtainedFile.IndexOf("0x");
+                while (pos != -1)
+                {
+                    string txt;
+                    char limit = obtainedFile.ElementAt(pos - 1);
+                    end = obtainedFile.IndexOf(limit, pos);
+
+                    txt = obtainedFile.Substring(pos, end - pos);
+                    obtainedFile = obtainedFile.Replace(txt, "_Address_");
+                    pos = obtainedFile.IndexOf("0x", pos);
+                }
+
+                int counter = 1;
+
+                pos = obtainedFile.IndexOf("[New pid");
+                while (pos != -1)
+                {
+                    pos += 9;
+                    end = obtainedFile.IndexOf(' ', pos);
+                    if ((obtainedFile[pos] >= '0') && (obtainedFile[pos] <= '9'))
+                    {
+                        string txt = obtainedFile.Substring(pos, end - pos);
+                        obtainedFile = obtainedFile.Replace(txt, "ProcessID_" + counter);
+                        counter++;
+                    }
+                    pos = obtainedFile.IndexOf("[New pid", end);
+                }
+
+                pos = obtainedFile.IndexOf(",times=\"");
+                while (pos != -1)
+                {
+                    pos += 8;
+                    end = obtainedFile.IndexOf('\"', pos);
+
+                    string txt = obtainedFile.Substring(pos, end - pos);
+                    int i = -1;
+                    try
+                    {
+                        i = Convert.ToInt32(txt);
+                    }
+                    catch
+                    {
+                        i = -1;
+                    }
+                    if (i != -1)
+                    {
+                        obtainedFile = obtainedFile.Substring(0, pos) + "xxx" + obtainedFile.Substring(end);
+
+                        pos = obtainedFile.IndexOf("Parsed - 2", end);
+                        end = obtainedFile.IndexOf('\n', pos);
+                        pos = obtainedFile.LastIndexOf(';', end) + 1;
+
+                        obtainedFile = obtainedFile.Substring(0, pos) + "xxx" + obtainedFile.Substring(end);
+                    }
+                    pos = obtainedFile.IndexOf(",times=\"", end);
+                }
+
+                obtainedFile = obtainedFile.Replace("\r", "");
+
+                while (obtainedFile.IndexOf("\n\n") != -1)
+                {
+                    obtainedFile = obtainedFile.Replace("\n\n", "\n");
+                }
+
+                pos = obtainedFile.IndexOf("$GDB - ");
+                while (pos != -1)
+                {
+                    end = obtainedFile.IndexOf("\n$", pos);
+                    int newLineChar = obtainedFile.IndexOf('\n', pos);
+                    while (newLineChar < end)
+                    {
+                        obtainedFile = obtainedFile.Substring(0, newLineChar) + " " + obtainedFile.Substring(newLineChar + 1);
+                        newLineChar = obtainedFile.IndexOf('\n', pos);
+                    }
+
+                    pos = end + 2;
+                    end = obtainedFile.IndexOf("\n$", pos);
+                    newLineChar = obtainedFile.IndexOf('\n', pos);
+                    while (newLineChar < end)
+                    {
+                        obtainedFile = obtainedFile.Substring(0, newLineChar) + " " + obtainedFile.Substring(newLineChar + 1);
+                        newLineChar = obtainedFile.IndexOf('\n', pos);
+                    }
+
+                    pos = obtainedFile.IndexOf("$GDB - ", end);
+                }
+
+                obtainedFile = removeDoubleSpaces(obtainedFile);
+                obtainedFile = obtainedFile.Replace("$ \n", "$\n");
+
+                // Writing contents to file.
+                System.IO.StreamWriter writeObtainedFile = null;
+                try
+                {
+                    writeObtainedFile = new System.IO.StreamWriter(Environment.GetEnvironmentVariable("APPDATA") + "\\BlackBerry\\obtained-output.log");
+                    writeObtainedFile.Write(obtainedFile);
+                    writeObtainedFile.Close();
+                }
+                catch (Exception e)
+                {
+                }
+
+                string expectedFile = "";
+                System.IO.StreamReader expectedFileStream = null;
+                try
+                {
+                    expectedFileStream = new System.IO.StreamReader(Environment.GetEnvironmentVariable("APPDATA") + "\\BlackBerry\\expected-output.log");
+                    expectedFile = expectedFileStream.ReadToEnd();
+                    expectedFileStream.Close();
+                }
+                catch (Exception e)
+                {
+                    expectedFile = "";
+                }
+
+                if (expectedFile == "")
+                {
+                    errorsFile = "You have to run the \"GenerateExpectedFile\" first, to generate the file \"expected-output.log\".";
+                }
+                else
+                {
+                    string expectedCommand, expectedGDBResponse, expectedParsedResponse,
+                           obtainedCommand, obtainedGDBResponse, obtainedParsedResponse, obtainedLastCommand = "", obtainedLastGDBResponse = "",
+                           logID = "";
+
+                    int expPos, expEnd = 0;
+
+                    end = 0;
+                    pos = obtainedFile.IndexOf("$GDB - ");
+                    expPos = expectedFile.IndexOf("$GDB - ");
+                    while ((pos != -1) && (expPos != -1))
+                    {
+                        // obtain GDB command, response and parsed response from the obtained stream
+                        pos = obtainedFile.LastIndexOf("\n$\n", pos) + 3;
+                        if (obtainedFile.ElementAt(pos + 1) == 'C')
+                        {
+                            pos += 11; // 11 = size of "$Command - "
+                            end = obtainedFile.IndexOf('\n', pos);
+                            if (end == pos)
+                                obtainedCommand = "";
+                            else
+                                obtainedCommand = obtainedFile.Substring(pos, end - pos);
+                        }
+                        else
+                        {
+                            obtainedCommand = "";
+                            end = pos - 1;
+                        }
+
+                        pos = end + 8; // size of "\n$GDB - "
+                        end = obtainedFile.IndexOf('\n', pos);
+                        if (end > pos)
+                            obtainedGDBResponse = obtainedFile.Substring(pos, end - pos);
+                        else
+                            obtainedGDBResponse = "";
+
+                        pos = end + 11; // size of "\n$Parsed - "
+                        end = obtainedFile.IndexOf('\n', pos);
+                        if (end > pos)
+                            obtainedParsedResponse = obtainedFile.Substring(pos, end - pos);
+                        else
+                            obtainedParsedResponse = "";
+
+                        pos = end + 1; // size of "\n"
+                        end = obtainedFile.IndexOf('\n', pos);
+                        if (end > pos)
+                            logID = obtainedFile.Substring(pos, end - pos);
+                        else
+                            logID = "";
+
+                        // Finished obtaining GDB command, response and parsed response from the obtained stream
+
+                        // obtain GDB command, response and parsed response from the expected stream. The expected file contents does not have double spaces.
+                        expPos = expectedFile.LastIndexOf("\n$\n", expPos) + 3; // 3 = size of "/n$/n"; 11 = size of "$Command - "
+                        if (expectedFile.ElementAt(expPos + 1) == 'C')
+                        {
+                            expPos += 11;
+                            expEnd = expectedFile.IndexOf('\n', expPos);
+                            if (expEnd == expPos)
+                                expectedCommand = "";
+                            else
+                                expectedCommand = expectedFile.Substring(expPos, expEnd - expPos);
+                        }
+                        else
+                        {
+                            expectedCommand = "";
+                            expEnd = expPos - 1;
+                        }
+
+                        expPos = expEnd + 8; // size of "\n$GDB - "
+                        expEnd = expectedFile.IndexOf('\n', expPos);
+                        if (expEnd > expPos)
+                            expectedGDBResponse = expectedFile.Substring(expPos, expEnd - expPos);
+                        else
+                            expectedGDBResponse = "";
+
+                        expPos = expEnd + 11; // size of "\n$Parsed - "
+                        expEnd = expectedFile.IndexOf('\n', expPos);
+                        if (expEnd > expPos)
+                            expectedParsedResponse = expectedFile.Substring(expPos, expEnd - expPos);
+                        else
+                            expectedParsedResponse = "";
+                        // Finished obtaining GDB command, response and parsed response from the expected stream
+
+                        string originalMessage = "";
+                        if (logID != "")
+                        {
+                            int aux_ini = originalFile.IndexOf(logID);
+                            int aux_end = originalFile.IndexOf("\n", aux_ini);
+                            aux_ini = originalFile.LastIndexOf("\r\n$\r\n", aux_end);
+                            originalMessage = originalFile.Substring(aux_ini, aux_end - aux_ini);
+                        }
+
+                        if (expectedGDBResponse != obtainedGDBResponse)
+                        {
+                            if ((expectedGDBResponse.Contains("breakpoint-modified")) || (obtainedGDBResponse.Contains("breakpoint-modified")))
+                            {
+                                if ((expectedGDBResponse.Contains("breakpoint-modified")) && (obtainedGDBResponse.Contains("breakpoint-modified")))
+                                {
+                                    errorsFile += "\r\nUnexpected GDB response: " + obtainedGDBResponse + ". \r\nExpected one           : " + expectedGDBResponse + ". \r\n In the original file: " + originalMessage + "\r\n\r\n";
+                                }
+                                else
+                                {
+                                    if (obtainedLastGDBResponse.Contains("breakpoint-modified"))
+                                    {
+                                        if (obtainedGDBResponse.Contains("breakpoint-modified"))
+                                        {
+                                            int auxPos = pos;
+                                            while (obtainedGDBResponse.Contains("breakpoint-modified"))
+                                            {
+                                                auxPos = obtainedFile.IndexOf("$GDB - ", auxPos);
+                                                auxPos += 7; // size of "$GDB - "
+                                                int auxEnd = obtainedFile.IndexOf('\n', auxPos);
+                                                obtainedGDBResponse = obtainedFile.Substring(auxPos, auxEnd - auxPos);
+                                            }
+                                            pos = obtainedFile.LastIndexOf("$\n", auxPos);
+                                            expPos = expectedFile.LastIndexOf("$\n", expPos);
+                                        }
+                                        else
+                                        {
+                                            int auxPos = expPos;
+                                            while (expectedGDBResponse.Contains("breakpoint-modified"))
+                                            {
+                                                auxPos = expectedFile.IndexOf("$GDB - ", auxPos);
+                                                auxPos += 7; // size of "$GDB - "
+                                                int auxEnd = expectedFile.IndexOf('\n', auxPos);
+                                                expectedGDBResponse = expectedFile.Substring(auxPos, auxEnd - auxPos);
+                                            }
+                                            expPos = expectedFile.LastIndexOf("$\n", auxPos);
+                                            pos = obtainedFile.LastIndexOf("$\n", pos);
+                                        }
+                                    }
+                                    else
+                                    {
+                                        errorsFile += "\r\nUnexpected GDB response: " + obtainedGDBResponse + ". \r\nExpected one           : " + expectedGDBResponse + ". \r\n In the original file: " + originalMessage + "\r\n\r\n";
+                                    }
+                                }
+
+                            }
+                            else if ((obtainedLastCommand.Contains("-exec-interrupt")) && (!obtainedCommand.Contains("16kill")))
+                            {
+                                if (((expectedGDBResponse.Contains("*stopped,frame")) || (expectedGDBResponse.Contains("*stopped,reason=\"signal-received\"")))
+                                    && ((obtainedGDBResponse.Contains("*stopped,frame")) || (obtainedGDBResponse.Contains("*stopped,reason=\"signal-received\""))))
+                                {
+                                    if (obtainedParsedResponse.Substring(0, 3) != "44;")
+                                    {
+                                        errorsFile += "\r\nProgram interruption was not parsed correctly: " + obtainedParsedResponse + ". \r\nExpected one                                 : " + expectedParsedResponse + ". \r\n In the original file: " + originalMessage + "\r\n\r\n";
+                                    }
+                                }
+                                else
+                                {
+                                    errorsFile += "\r\nWas expecting a program interruption: " + obtainedGDBResponse + ". \r\nExpected one                        : " + expectedGDBResponse + ". \r\n In the original file: " + originalMessage + "\r\n\r\n";
+                                }
+                            }
+                            else if (obtainedCommand.Contains("-stack-list-variables"))
+                            {
+                                string txt1 = removeBetweenQuotes(obtainedGDBResponse, ref obtainedParsedResponse, ",value=", 1);
+                                string txt2 = removeBetweenQuotes(expectedGDBResponse, ref expectedParsedResponse, ",value=", 1);
+                                if (txt1 != txt2)
+                                {
+                                    errorsFile += "\r\nUnexpected GDB response: " + obtainedGDBResponse + ". \r\nExpected one           : " + expectedGDBResponse + ". \r\n In the original file: " + originalMessage + "\r\n\r\n";
+                                }
+                                else if (obtainedParsedResponse != expectedParsedResponse)
+                                {
+                                    errorsFile += "\r\nResponse was not parsed correctly: " + obtainedParsedResponse + ". \r\nExpected one                     : " + expectedParsedResponse + ". \r\n In the original file: " + originalMessage + "\r\n\r\n";
+                                }
+                            }
+                            else if (obtainedCommand.Contains("-thread-info"))
+                            {
+                                string txt1 = cleanThreadInfo(obtainedGDBResponse, ref obtainedParsedResponse);
+                                string txt2 = cleanThreadInfo(expectedGDBResponse, ref expectedParsedResponse);
+                                if (txt1 != txt2)
+                                {
+                                    errorsFile += "\r\nUnexpected GDB response: " + obtainedGDBResponse + ". \r\nExpected one           : " + expectedGDBResponse + ". \r\n In the original file: " + originalMessage + "\r\n\r\n";
+                                }
+                                else if (obtainedParsedResponse != expectedParsedResponse)
+                                {
+                                    errorsFile += "\r\nResponse was not parsed correctly: " + obtainedParsedResponse + ". \r\nExpected one                     : " + expectedParsedResponse + ". \r\n In the original file: " + originalMessage + "\r\n\r\n";
+                                }
+                            }
+                            else if (obtainedCommand.Contains("-data-evaluate-expression"))
+                            {
+                                string txt1 = removeBetweenQuotes(obtainedGDBResponse, ref obtainedParsedResponse, ",value=", 2);
+                                string txt2 = removeBetweenQuotes(expectedGDBResponse, ref expectedParsedResponse, ",value=", 2);
+                                if (txt1 != txt2)
+                                {
+                                    errorsFile += "\r\nUnexpected GDB response: " + obtainedGDBResponse + ". \r\nExpected one           : " + expectedGDBResponse + ". \r\n In the original file: " + originalMessage + "\r\n\r\n";
+                                }
+                                else if (obtainedParsedResponse != expectedParsedResponse)
+                                {
+                                    errorsFile += "\r\nResponse was not parsed correctly: " + obtainedParsedResponse + ". \r\nExpected one                     : " + expectedParsedResponse + ". \r\n In the original file: " + originalMessage + "\r\n\r\n";
+                                }
+                            }
+                            else if (obtainedGDBResponse.Contains("^running *running,thread-id="))
+                            {
+                                string txt1 = removeBetweenQuotes(obtainedGDBResponse, ref obtainedParsedResponse, ",thread-id=", 1);
+                                string txt2 = removeBetweenQuotes(expectedGDBResponse, ref expectedParsedResponse, ",thread-id=", 1);
+                                if (txt1 != txt2)
+                                {
+                                    errorsFile += "\r\nUnexpected GDB response: " + obtainedGDBResponse + ". \r\nExpected one           : " + expectedGDBResponse + ". \r\n In the original file: " + originalMessage + "\r\n\r\n";
+                                }
+                                else if (obtainedParsedResponse != expectedParsedResponse)
+                                {
+                                    if ((!obtainedParsedResponse.Contains("41;")) || (!expectedParsedResponse.Contains("41;")))
+                                        errorsFile += "\r\nResponse was not parsed correctly: " + obtainedParsedResponse + ". \r\nExpected one                     : " + expectedParsedResponse + ". \r\n In the original file: " + originalMessage + "\r\n\r\n";
+                                }
+                            }
+                            else if ((obtainedCommand.Contains("16kill")) && (obtainedGDBResponse.Contains("kill")) && (expectedGDBResponse.Contains("kill")))
+                            {
+                                string gdbResponse = obtainedGDBResponse;
+                                string expectedResponse = expectedGDBResponse;
+                                if (obtainedGDBResponse.Length > expectedGDBResponse.Length)
+                                {
+                                    while (gdbResponse.Contains(expectedResponse))
+                                    {
+                                        gdbResponse = gdbResponse.Replace(expectedResponse, "");
+
+                                        expPos = expectedFile.IndexOf("$GDB - ", expPos);
+
+                                        if (expPos == -1)
+                                            break;
+
+                                        // obtain GDB response and parsed response from the expected stream. The expected file contents does not have double spaces.
+                                        expPos = expectedFile.LastIndexOf("\n$\n", expPos) + 3; // 3 = size of "/n$/n"
+
+                                        expPos = expPos + 7; // size of "$GDB - "
+                                        expEnd = expectedFile.IndexOf('\n', expPos);
+                                        if (expEnd > expPos)
+                                            expectedResponse = expectedFile.Substring(expPos, expEnd - expPos);
+                                        else
+                                            expectedResponse = "";
+                                        expectedGDBResponse += expectedResponse;
+
+                                        expPos = expEnd + 11; // size of "\n$Parsed - "
+                                        expEnd = expectedFile.IndexOf('\n', expPos);
+                                        if (expEnd > expPos)
+                                            expectedParsedResponse += expectedFile.Substring(expPos, expEnd - expPos);
+                                        // Finished obtaining GDB command, response and parsed response from the expected stream
+                                    }
+                                    if (gdbResponse.Trim() != "")
+                                    {
+                                        errorsFile += "\r\nUnexpected GDB response: " + obtainedGDBResponse + ". \r\nExpected one           : " + expectedGDBResponse + ". \r\n In the original file: " + originalMessage + "\r\n\r\n";
+                                    }
+                                }
+                                else
+                                {
+
+                                    while (expectedResponse.Contains(gdbResponse))
+                                    {
+                                        expectedResponse = expectedResponse.Replace(gdbResponse, "");
+
+                                        pos = obtainedFile.IndexOf("$GDB - ", pos);
+
+                                        if (pos == -1)
+                                            break;
+
+                                        // obtain GDB response and parsed response from the obtained stream. The obtained file contents does not have double spaces.
+                                        pos = obtainedFile.LastIndexOf("\n$\n", pos) + 3; // 3 = size of "/n$/n"
+
+                                        pos = pos + 7; // size of "$GDB - "
+                                        end = obtainedFile.IndexOf('\n', pos);
+                                        if (end > pos)
+                                            gdbResponse = obtainedFile.Substring(pos, end - pos);
+                                        else
+                                            gdbResponse = "";
+                                        obtainedGDBResponse += gdbResponse;
+
+                                        pos = end + 11; // size of "\n$Parsed - "
+                                        end = obtainedFile.IndexOf('\n', pos);
+                                        if (end > pos)
+                                            obtainedParsedResponse += obtainedFile.Substring(pos, end - pos);
+                                        // Finished obtaining GDB command, response and parsed response from the expected stream
+                                    }
+                                    if (expectedResponse.Trim() != "")
+                                    {
+                                        errorsFile += "\r\nUnexpected GDB response: " + obtainedGDBResponse + ". \r\nExpected one           : " + expectedGDBResponse + ". \r\n In the original file: " + originalMessage + "\r\n\r\n";
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                errorsFile += "\r\nUnexpected GDB response: " + obtainedGDBResponse + ". \r\nExpected one           : " + expectedGDBResponse + ". \r\n In the original file: " + originalMessage + "\r\n\r\n";
+                            }
+                        }
+                        else if (expectedParsedResponse != obtainedParsedResponse)
+                        {
+                            errorsFile += "\r\nResponse was not parsed correctly: " + obtainedParsedResponse + ". \r\nExpected one                     : " + expectedParsedResponse + ". \r\n In the original file: " + originalMessage + "\r\n\r\n";
+                        }
+//                        else if (expectedCommand != obtainedCommand)
+//                        {
+//                            errorsFile += "Unexpected GDB response: " + obtainedGDBResponse + ". \r\nExpected one: " + expectedGDBResponse + ". \r\n In the original file: " + originalMessage + "\r\n\r\n";
+//                        }
+
+                        obtainedLastGDBResponse = obtainedGDBResponse;
+                        if (obtainedCommand != "")
+                            obtainedLastCommand = obtainedCommand;
+
+                        if (pos != -1)
+                            pos = obtainedFile.IndexOf("$GDB - ", pos);
+                        if (expPos != -1)
+                            expPos = expectedFile.IndexOf("$GDB - ", expPos);
+                    }
+
+                    if (pos != -1)
+                    {
+                        errorsFile += "These obtained commands/responses were not evaluated:\r\n" + obtainedFile.Substring(pos) + "\r\n\r\n";
+                    }
+
+                    if (expPos != -1)
+                    {
+                        errorsFile += "These expected commands/responses were not evaluated:\r\n" + expectedFile.Substring(expPos) + "\r\n\r\n";
+                    }
+                }
+            }
+            
+            // Writing contents to file.
+            System.IO.StreamWriter writeErrorsFile = null;
+            try
+            {
+                writeErrorsFile = new System.IO.StreamWriter(Environment.GetEnvironmentVariable("APPDATA") + "\\BlackBerry\\errors-output.log");
+                writeErrorsFile.Write(errorsFile);
+                writeErrorsFile.Close();
+            }
+            catch (Exception e)
+            {
+            }
+
+            StringAssert.AreEqualIgnoringCase(errorsFile, "", errorsFile);
+        }
+
+        private string cleanThreadInfo(string txt, ref string parsed)
+        {
+            int p1 = txt.IndexOf("name \\\"consumerThread\\\""), p2;
+            if (p1 != -1)
+            {
+                p1 += 23; // size of "name \\\"consumerThread\\\""
+                p2 = txt.IndexOf("},state", p1);
+                txt = txt.Substring(0, p1) + txt.Substring(p2 + 1);
+
+                p1 = parsed.IndexOf("name \\\"consumerThread\\\";") + 24;
+                p2 = parsed.IndexOf(";consumerThread#", p1);
+                parsed = parsed.Substring(0, p1) + parsed.Substring(p2);
+            }
+
+            p1 = txt.IndexOf("name \\\"producerThread\\\"");
+            if (p1 != -1)
+            {
+                p1 += 23; // size of "name \\\"producerThread\\\""
+                p2 = txt.IndexOf("},state", p1);
+                txt = txt.Substring(0, p1) + txt.Substring(p2 + 1);
+
+                p1 = parsed.IndexOf("name \\\"producerThread\\\";") + 24;
+                p2 = parsed.IndexOf(";producerThread#", p1);
+                parsed = parsed.Substring(0, p1) + parsed.Substring(p2);
+            }
+            return txt;
+        }
+
+        private string removeBetweenQuotes(string txt, ref string parsed, string value, int option)
+        {
+            int p1 = txt.IndexOf(value + "\""), p2;
+            while (p1 != -1)
+            {
+                p1 += value.Length;
+                if (option == 1)
+                    p2 = txt.IndexOf("\"", p1 + 1) + 1;
+                else
+                    p2 = txt.LastIndexOf("\"") + 1;
+                string temp = txt.Substring(p1, p2 - p1);
+                txt = txt.Replace(temp, "");
+                if (option == 1)
+                    temp = ";" + temp.Replace("\"", "") + "#";
+                parsed = parsed.Replace(temp, ";#");
+                p1 = txt.IndexOf(value + "\"");
+            }
+            return txt;
+        }
+
+        private string removeDoubleSpaces(string txt)
+        {
+            while (txt.IndexOf("  ") != -1)
+            {
+                txt = txt.Replace("  ", " ");
+            }
+            return txt;
+        }
+
         [Test]
         public void GetNextChar()
         {
@@ -383,4 +923,149 @@ namespace GDBParser_UnitTests
         }
 
     }
+
+    public class GenerateExpectedFile
+    {
+        [Test]
+        public void generateExpectedFile()
+        {
+            string obtainedFile = "", errorsFile = "";
+            System.IO.StreamReader obtainedFileStream = null;
+            try
+            {
+                obtainedFileStream = new System.IO.StreamReader(Environment.GetEnvironmentVariable("APPDATA") + "\\BlackBerry\\parsedGDBResponse-output.log");
+                obtainedFile = obtainedFileStream.ReadToEnd();
+                obtainedFileStream.Close();
+            }
+            catch (Exception e)
+            {
+                obtainedFile = "";
+            }
+
+            if (obtainedFile == "")
+            {
+                errorsFile = "You have to run the test \"_TestGDB\" first, to generate the file \"parsedGDBResponse-output.log\".";
+            }
+            else
+            {
+                obtainedFile = obtainedFile.Replace("\"0x0\"", "NULL");
+
+                while (obtainedFile.Contains("$\r\n$GDB - *running,thread-id="))
+                {
+                    int p1 = obtainedFile.IndexOf("$\r\n$GDB - *running,thread-id=\"all\"");
+                    int p2 = obtainedFile.IndexOf("\r\n$\r\n", p1);
+                    obtainedFile = obtainedFile.Substring(0, p1) + obtainedFile.Substring(p2 + 1);
+                }
+
+                int end, pos = obtainedFile.IndexOf("0x");
+                while (pos != -1)
+                {
+                    string txt;
+                    char limit = obtainedFile.ElementAt(pos - 1);
+                    end = obtainedFile.IndexOf(limit, pos);
+
+                    txt = obtainedFile.Substring(pos, end - pos);
+                    obtainedFile = obtainedFile.Replace(txt, "_Address_");
+                    pos = obtainedFile.IndexOf("0x", pos);
+                }
+
+                int counter = 1;
+
+                pos = obtainedFile.IndexOf("[New pid");
+                while (pos != -1)
+                {
+                    pos += 9;
+                    end = obtainedFile.IndexOf(' ', pos);
+                    if ((obtainedFile[pos] >= '0') && (obtainedFile[pos] <= '9'))
+                    {
+                        string txt = obtainedFile.Substring(pos, end - pos);
+                        obtainedFile = obtainedFile.Replace(txt, "ProcessID_" + counter);
+                        counter++;
+                    }
+                    pos = obtainedFile.IndexOf("[New pid", end);
+                }
+
+                pos = obtainedFile.IndexOf(",times=\"");
+                while (pos != -1)
+                {
+                    pos += 8;
+                    end = obtainedFile.IndexOf('\"', pos);
+
+                    string txt = obtainedFile.Substring(pos, end - pos);
+                    int i = -1;
+                    try
+                    {
+                        i = Convert.ToInt32(txt);
+                    }
+                    catch
+                    {
+                        i = -1;
+                    }
+                    if (i != -1)
+                    {
+                        obtainedFile = obtainedFile.Substring(0, pos) + "xxx" + obtainedFile.Substring(end);
+
+                        pos = obtainedFile.IndexOf("Parsed - 2", end);
+                        end = obtainedFile.IndexOf('\n', pos);
+                        pos = obtainedFile.LastIndexOf(';', end) + 1;
+
+                        obtainedFile = obtainedFile.Substring(0, pos) + "xxx" + obtainedFile.Substring(end);
+                    }
+                    pos = obtainedFile.IndexOf(",times=\"", end);
+                }
+
+                obtainedFile = obtainedFile.Replace("\r", "");
+
+                while (obtainedFile.IndexOf("\n\n") != -1)
+                {
+                    obtainedFile = obtainedFile.Replace("\n\n", "\n");
+                }
+
+                pos = obtainedFile.IndexOf("$GDB - ");
+                while (pos != -1)
+                {
+                    end = obtainedFile.IndexOf("\n$", pos);
+                    int newLineChar = obtainedFile.IndexOf('\n', pos);
+                    while (newLineChar < end)
+                    {
+                        obtainedFile = obtainedFile.Substring(0, newLineChar) + " " + obtainedFile.Substring(newLineChar + 1);
+                        newLineChar = obtainedFile.IndexOf('\n', pos);
+                    }
+
+                    pos = end + 2;
+                    end = obtainedFile.IndexOf("\n$", pos);
+                    newLineChar = obtainedFile.IndexOf('\n', pos);
+                    while (newLineChar < end)
+                    {
+                        obtainedFile = obtainedFile.Substring(0, newLineChar) + " " + obtainedFile.Substring(newLineChar + 1);
+                        newLineChar = obtainedFile.IndexOf('\n', pos);
+                    }
+
+                    pos = obtainedFile.IndexOf("$GDB - ", end);
+                }
+
+                while (obtainedFile.IndexOf("  ") != -1)
+                {
+                    obtainedFile = obtainedFile.Replace("  ", " ");
+                }
+
+                obtainedFile = obtainedFile.Replace("$ \n", "$\n");
+
+                // Writing contents to file.
+                System.IO.StreamWriter writeObtainedFile = null;
+                try
+                {
+                    writeObtainedFile = new System.IO.StreamWriter(Environment.GetEnvironmentVariable("APPDATA") + "\\BlackBerry\\expected-output.log");
+                    writeObtainedFile.Write(obtainedFile);
+                    writeObtainedFile.Close();
+                }
+                catch (Exception e)
+                {
+                }
+            }
+
+            StringAssert.AreEqualIgnoringCase(errorsFile, "", errorsFile);
+        }
+    }
+
 }

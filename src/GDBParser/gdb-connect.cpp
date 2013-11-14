@@ -124,7 +124,7 @@ bool exitGDB = false;
 /// Used to store the path to GDB output log, generated when GDB console is instantiated and needed in logPrint(). 
 /// </summary>
 char path_log[_MAX_PATH];
-
+int parsedLogID = 0;
 
 /// <summary> 
 /// Used to store the path to the parsed GDB responses output log, generated when the sendingCommands2GDB thread is started and needed in parsedLogPrint(). 
@@ -1619,19 +1619,14 @@ unsigned __stdcall parseGDBResponseThread(void *arg)
 /// <param name="buffer"> Message to be printed to a log file. </param>
 void parsedLogPrint(char* buffer) {	
 	if (LOG_GDB_RAW_IO) {
-		time_t tt = time(NULL);
-		struct tm tm;
-		char buf[32];
-
-		tm = *localtime(&tt);
-
-		strftime(buf, 31, "%H:%M:%S", &tm);
-
 		FILE* file = fopen((char *)parse_log, "a");
 		if (buffer[0] == 'P')
-			fprintf(file, "%s - %s\n\n", buf, buffer);
+		{
+			parsedLogID++;
+			fprintf(file, "$%s\n$ID=%d$\n$\n", buffer, parsedLogID);
+		}
 		else
-			fprintf(file, "%s - %s", buf, buffer);
+			fprintf(file, "$%s", buffer);
 		fclose(file);
 	}
 }
@@ -1889,6 +1884,7 @@ unsigned __stdcall sendingCommands2GDB(void *arg)
 
 	FILE* file = fopen(parse_log, "w"); // Delete a possible existing file.
 	fclose(file);
+	parsedLogPrint("\n$\n");
 
 	// Initializing listeningGDB thread data.
 	HANDLE listeningThread;
